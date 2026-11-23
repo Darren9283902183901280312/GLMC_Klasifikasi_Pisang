@@ -23,8 +23,8 @@ except ImportError:
 
 JUDUL = "Klasifikasi kematangan pisang"
 DESKRIPSI = ("Unggah foto pisang. Aplikasi mengekstrak fitur tekstur (GLCM), warna, dan bentuk, "
-             "lalu memprediksi tingkat kematangannya dengan machine learning.")
-NAMA_DATASET = "Banana Ripeness Classification (Roboflow Universe), 6 kelas, format folder train/valid/test"
+             "lalu memprediksi tingkat kematangannya melalui empat metode klasifikasi.")
+NAMA_DATASET = "Banana Ripeness Classification (Roboflow Universe), 6 kelas, dipisah menjadi tiga bagian: train/valid/test"
 CATATAN_INPUT = "Gunakan foto pisang dengan latar sederhana dan pencahayaan cukup."
 NAMA_TAMPIL = {
     "freshripe": "Fresh ripe (matang segar)",
@@ -353,7 +353,7 @@ def prediksi(model, scaler, vektor, nama_fitur):
     urut = np.argsort(proba)[::-1]
     return [(str(model.classes_[i]), float(proba[i])) for i in urut]
 
-
+    
 def baca_unggahan(file):
     return cv2.cvtColor(np.array(Image.open(file).convert("RGB")), cv2.COLOR_RGB2BGR)
 
@@ -526,12 +526,12 @@ with tab_model:
 
 with tab_tentang:
     st.markdown(f"""
-**Dataset.** {NAMA_DATASET}.
+**Dataset:** {NAMA_DATASET}.
 
-**Metode.** Fitur tekstur GLCM (Contrast, Correlation, Energy, Homogeneity) dapat digabung dengan
+**Metode:** Fitur tekstur GLCM (Contrast, Correlation, Energy, Homogeneity) dapat digabung dengan
 histogram warna HSV dan fitur bentuk (HOG, Hu Moments). Set fitur dipilih berdasarkan F1-score pada
 data valid. Fitur dinormalisasi dengan StandardScaler lalu diklasifikasikan dengan Naive Bayes,
-Decision Tree, SVM, dan KNN.
+Decision Tree, SVM, dan KNN :).
 """)
     st.write("Jumlah citra per kelas:")
     ps = scaler.info_["jumlah_per_split"]
