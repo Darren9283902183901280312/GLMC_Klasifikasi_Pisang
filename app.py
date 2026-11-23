@@ -3,12 +3,14 @@ app.py - Aplikasi klasifikasi citra kematangan pisang (ekstraksi fitur GLCM + ma
 Jalankan:  streamlit run app.py
 Model dihasilkan oleh dataset_citra.ipynb dan disimpan di folder models/.
 """
+import base64
 import html
 from pathlib import Path
 
 import cv2
 import joblib
 import matplotlib.pyplot as plt
+from matplotlib.colors import LinearSegmentedColormap
 import numpy as np
 import pandas as pd
 import streamlit as st
@@ -134,26 +136,121 @@ ALGO_FILE = {"Naive Bayes": "naive_bayes", "Decision Tree": "decision_tree", "SV
 
 st.set_page_config(page_title=JUDUL, page_icon="🍌", layout="wide")
 
-st.markdown("""
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Manrope:wght@500;700;800&display=swap');
-h1, h2, h3 { font-family: 'Manrope', system-ui, sans-serif !important; letter-spacing: -0.01em; }
-.block-container { padding-top: 1.5rem; max-width: 1150px; }
-.hero { background: #14303A; color: #F3F5F4; padding: 1.6rem 2rem; border-radius: 6px; margin-bottom: 1.2rem; }
-.hero h1 { color: #F3F5F4; margin: 0 0 .35rem 0; font-size: 2rem; }
-.hero p { margin: 0; color: #C9D8D6; max-width: 46rem; line-height: 1.55; }
-.hasil { border-left: 6px solid #0B6E6E; background: #FFFFFF; padding: 1rem 1.3rem; border-radius: 4px; margin-bottom: 1rem; }
-.hasil.rendah { border-left-color: #C98A1B; }
-.hasil .ket { color: #5B6B73; font-size: .9rem; }
-.hasil .kelas { font-family: 'Manrope', system-ui, sans-serif; font-weight: 800; font-size: 2rem;
-                line-height: 1.15; margin: .15rem 0 .5rem 0; word-break: break-word; }
-.meter { background: #E1E8E5; height: 10px; border-radius: 5px; overflow: hidden; }
-.meter > div { background: #0B6E6E; height: 100%; }
-.hasil.rendah .meter > div { background: #C98A1B; }
-.hasil .nilai { margin-top: .4rem; font-size: .95rem; }
-.benar { color: #0B6E6E; font-weight: 700; } .salah { color: #B3261E; font-weight: 700; }
-</style>
-""", unsafe_allow_html=True)
+# ---------------------------------------------------------------------------
+# Tema pisang (otomatis mengikuti mode terang / gelap)
+# ---------------------------------------------------------------------------
+PALET = {
+    "light": dict(panel="#FFFDF4", card="#FFFFFF", side="#FFF6D6", line="#E6DAA8", text="#2B2412",
+                  muted="#6B6248", accent="#F2B705", track="#F3EBC8", warn="#C26A1B", ok="#2E7D32",
+                  bad="#B3261E", cm=("#FFFBE0", "#F2B705", "#6B4400")),
+    "dark": dict(panel="#1E1B12", card="#29251A", side="#26221A", line="#403A24", text="#F4EFD8",
+                 muted="#B5AE92", accent="#FFD21F", track="#3A3520", warn="#E9A25A", ok="#7BD88F",
+                 bad="#FF8A80", cm=("#2A2618", "#C98F00", "#FFE066")),
+}
+
+
+def mode_tema():
+    """'light' / 'dark' dari Streamlit (>= 1.46); None bila tidak diketahui (ikut pengaturan sistem)."""
+    try:
+        t = st.context.theme.type
+        return t if t in PALET else None
+    except Exception:
+        return None
+
+
+MODE = mode_tema()
+P = PALET[MODE or "light"]
+
+
+@st.cache_resource
+def pola_latar(nama_berkas):
+    p = ROOT / "assets" / nama_berkas
+    return base64.b64encode(p.read_bytes()).decode() if p.exists() else ""
+
+
+def vars_css(p):
+    return (f"--panel:{p['panel']};--card:{p['card']};--side:{p['side']};--line:{p['line']};--text:{p['text']};"
+            f"--muted:{p['muted']};--accent:{p['accent']};--track:{p['track']};--warn:{p['warn']};"
+            f"--ok:{p['ok']};--bad:{p['bad']};")
+
+
+def css_latar(p, berkas, overlay):
+    b64 = pola_latar(berkas)
+    gambar = f"url(data:image/jpeg;base64,{b64})" if b64 else "none"
+    lapisan = f"linear-gradient({overlay},{overlay}),{gambar}" if overlay else gambar
+    return f"--latar:{lapisan};"
+
+
+if MODE == "dark":
+    VARS = f":root{{{vars_css(PALET['dark'])}{css_latar(PALET['dark'], 'banana_pattern_dark.jpg', '')}}}"
+elif MODE == "light":
+    VARS = f":root{{{vars_css(PALET['light'])}{css_latar(PALET['light'], 'banana_pattern.jpg', 'rgba(255,253,244,.50)')}}}"
+else:  # mode tidak diketahui: terang secara bawaan, gelap bila sistem memakai mode gelap
+    VARS = (f":root{{{vars_css(PALET['light'])}{css_latar(PALET['light'], 'banana_pattern.jpg', 'rgba(255,253,244,.50)')}}}"
+            f"@media (prefers-color-scheme: dark){{:root{{{vars_css(PALET['dark'])}"
+            f"{css_latar(PALET['dark'], 'banana_pattern_dark.jpg', '')}}}}}")
+
+st.markdown("<style>\n@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap');\n"
+            + VARS + """
+html, body, .stApp, [data-testid="stMarkdownContainer"] { font-family: 'Nunito', system-ui, sans-serif; }
+h1, h2, h3 { font-family: 'Nunito', system-ui, sans-serif !important; font-weight: 800 !important; letter-spacing: -0.01em; }
+
+/* Latar halaman: pola pisang. Konten ada di panel solid agar mudah dibaca. */
+.stApp { background-image: var(--latar); background-size: 480px 480px; background-repeat: repeat; background-attachment: fixed; }
+header[data-testid="stHeader"] { background: transparent; }
+.block-container, [data-testid="stMainBlockContainer"] {
+    max-width: 1150px; background: var(--panel); border: 1px solid var(--line); border-radius: 18px;
+    padding: 1.8rem 2.2rem 2.4rem 2.2rem !important; margin-top: 1rem; margin-bottom: 1.5rem; }
+section[data-testid="stSidebar"], section[data-testid="stSidebar"] > div { background: var(--side); }
+section[data-testid="stSidebar"] { border-right: 1px solid var(--line); }
+
+/* Hero: kuning pisang dengan teks gelap (kontras tinggi di kedua mode) */
+.hero { background: linear-gradient(135deg, #FFDD3C 0%, #F7B801 100%); color: #2B2412;
+        padding: 1.5rem 1.9rem; border-radius: 14px; margin-bottom: 1.3rem; }
+.hero h1 { color: #2B2412; margin: 0 0 .35rem 0; font-size: 2rem; }
+.hero p { margin: 0; color: #3A3016; max-width: 46rem; line-height: 1.55; font-weight: 600; }
+
+/* Kartu hasil */
+.hasil { border: 1px solid var(--line); border-left: 6px solid var(--accent); background: var(--card);
+         padding: 1rem 1.3rem; border-radius: 12px; margin-bottom: 1rem; }
+.hasil.rendah { border-left-color: var(--warn); }
+.hasil .ket { color: var(--muted); font-size: .9rem; font-weight: 600; }
+.hasil .kelas { font-weight: 800; font-size: 2rem; line-height: 1.15; margin: .15rem 0 .6rem 0;
+                word-break: break-word; color: var(--text); }
+.meter { background: var(--track); height: 10px; border-radius: 5px; overflow: hidden; }
+.meter > div { background: var(--accent); height: 100%; border-radius: 5px; }
+.hasil.rendah .meter > div { background: var(--warn); }
+.hasil .nilai { margin-top: .45rem; font-size: .95rem; color: var(--text); }
+.benar { color: var(--ok); font-weight: 700; } .salah { color: var(--bad); font-weight: 700; }
+
+/* Tab, gambar */
+button[data-baseweb="tab"] { font-weight: 700; }
+div[data-baseweb="tab-highlight"] { background-color: var(--accent) !important; }
+[data-testid="stImage"] img { border-radius: 10px; }
+</style>""", unsafe_allow_html=True)
+
+
+def gaya_matplotlib():
+    """Samakan warna grafik matplotlib dengan panel agar terbaca di mode terang maupun gelap."""
+    plt.rcParams.update({
+        "figure.facecolor": P["panel"], "axes.facecolor": P["panel"], "savefig.facecolor": P["panel"],
+        "text.color": P["text"], "axes.labelcolor": P["text"], "axes.edgecolor": P["line"],
+        "xtick.color": P["text"], "ytick.color": P["text"],
+    })
+
+
+def cmap_pisang():
+    return LinearSegmentedColormap.from_list("pisang", list(P["cm"]))
+
+
+def warna_sel(rasio):
+    """Warna angka di dalam sel confusion matrix, kontras terhadap warna selnya."""
+    if MODE == "dark":
+        return "#1E1B12" if rasio > 0.6 else "#F4EFD8"
+    return "#FFFFFF" if rasio > 0.6 else "#2B2412"
+
+
+gaya_matplotlib()
 
 @st.cache_resource
 def muat_semua():
@@ -210,7 +307,7 @@ def baca_unggahan(file):
 
 scaler, models = muat_semua()
 
-st.markdown(f'<div class="hero"><h1>{html.escape(JUDUL)}</h1><p>{html.escape(DESKRIPSI)}</p></div>',
+st.markdown(f'<div class="hero"><h1>🍌 {html.escape(JUDUL)}</h1><p>{html.escape(DESKRIPSI)}</p></div>',
             unsafe_allow_html=True)
 
 if scaler is None or not models:
@@ -310,7 +407,7 @@ else:
         glcm = hitung_glcm(gray)
         rata = glcm[:, :, 0, :].mean(axis=2) 
         fig, ax = plt.subplots(figsize=(4.2, 3.6))
-        im = ax.imshow(np.log1p(rata * 1e3), cmap="Greens")
+        im = ax.imshow(np.log1p(rata * 1e3), cmap=cmap_pisang())
         ax.set_xlabel("Level keabuan j")
         ax.set_ylabel("Level keabuan i")
         ax.set_title("Matriks GLCM (jarak 1, rata-rata 4 sudut)", fontsize=9)
@@ -345,14 +442,15 @@ with tab_model:
     c1, c2 = st.columns([1, 1], gap="large")
     with c1:
         st.caption("Perbandingan metrik pada data test")
-        st.bar_chart(df.set_index("Algoritma")[["Precision", "Recall", "F1-score", "Akurasi"]])
+        st.bar_chart(df.set_index("Algoritma")[["Precision", "Recall", "F1-score", "Akurasi"]],
+                     color=["#F2B705", "#8B5A00", "#6B8E23", "#C26A1B"])
     with c2:
         st.caption(f"Confusion matrix: {algo}")
         kelas = model.info_["kelas"]
         cm = np.array(model.info_["confusion"])
         fig, ax = plt.subplots(figsize=(5, 4.4))
         besar = len(kelas) > 12
-        ax.imshow(cm / cm.sum(axis=1, keepdims=True).clip(min=1) if besar else cm, cmap="Blues")
+        ax.imshow(cm / cm.sum(axis=1, keepdims=True).clip(min=1) if besar else cm, cmap=cmap_pisang())
         ax.set_xticks(range(len(kelas)))
         ax.set_yticks(range(len(kelas)))
         ax.set_xticklabels(kelas, rotation=45 if not besar else 90, ha="right" if not besar else "center",
@@ -362,7 +460,7 @@ with tab_model:
             for i in range(len(kelas)):
                 for j in range(len(kelas)):
                     ax.text(j, i, cm[i, j], ha="center", va="center", fontsize=8,
-                            color="white" if cm[i, j] > cm.max() / 2 else "black")
+                            color=warna_sel(cm[i, j] / max(cm.max(), 1)))
         ax.set_xlabel("Prediksi")
         ax.set_ylabel("Sebenarnya")
         plt.tight_layout()
