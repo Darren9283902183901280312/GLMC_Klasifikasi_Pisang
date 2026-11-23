@@ -181,14 +181,35 @@ def css_latar(p, berkas, overlay):
     return f"--latar:{lapisan};"
 
 
+_LT = f"{vars_css(PALET['light'])}{css_latar(PALET['light'], 'banana_pattern.jpg', 'rgba(255,253,244,.50)')}"
+_DK = f"{vars_css(PALET['dark'])}{css_latar(PALET['dark'], 'banana_pattern_dark.jpg', '')}"
+# Sumber kebenaran = tema yang benar-benar tampil di browser (skrip di bawah menulis data-tema).
+# Hasil st.context.theme hanya dipakai sebagai petunjuk awal dan selalu dikalahkan oleh data-tema.
+VARS = f":root{{{_LT}}}:root[data-tema=\"dark\"]{{{_DK}}}"
 if MODE == "dark":
-    VARS = f":root{{{vars_css(PALET['dark'])}{css_latar(PALET['dark'], 'banana_pattern_dark.jpg', '')}}}"
-elif MODE == "light":
-    VARS = f":root{{{vars_css(PALET['light'])}{css_latar(PALET['light'], 'banana_pattern.jpg', 'rgba(255,253,244,.50)')}}}"
-else:  # mode tidak diketahui: terang secara bawaan, gelap bila sistem memakai mode gelap
-    VARS = (f":root{{{vars_css(PALET['light'])}{css_latar(PALET['light'], 'banana_pattern.jpg', 'rgba(255,253,244,.50)')}}}"
-            f"@media (prefers-color-scheme: dark){{:root{{{vars_css(PALET['dark'])}"
-            f"{css_latar(PALET['dark'], 'banana_pattern_dark.jpg', '')}}}}}")
+    VARS += f":root:not([data-tema=\"light\"]){{{_DK}}}"
+
+# Penyesuaian khusus mode terang. Mode gelap tidak disentuh sama sekali.
+# Teks & widget Streamlit dipaksa mengikuti palet pisang agar serasi dengan panel krem.
+_L = ':root[data-tema="light"] ' if MODE == "dark" else ':root:not([data-tema="dark"]) '
+if True:
+    _teks = (".block-container, .block-container p, .block-container li, .block-container label, .block-container h1, "
+             ".block-container h2, .block-container h3, .block-container h4, .block-container [data-testid=\"stMarkdownContainer\"], "
+             "section[data-testid=\"stSidebar\"] p, section[data-testid=\"stSidebar\"] label, section[data-testid=\"stSidebar\"] h2, "
+             "section[data-testid=\"stSidebar\"] [data-testid=\"stMarkdownContainer\"]")
+    _muted = (".block-container [data-testid=\"stCaptionContainer\"], section[data-testid=\"stSidebar\"] "
+              "[data-testid=\"stCaptionContainer\"], button[data-baseweb=\"tab\"]")
+    _pre = lambda sel: ", ".join(_L + x.strip() for x in sel.split(", "))
+    CSS_TERANG = (
+        _pre(_teks) + " { color: var(--text); }\n"
+        + _pre(_muted) + " { color: var(--muted); }\n"
+        + _pre('button[data-baseweb="tab"][aria-selected="true"]') + " { color: var(--text); }\n"
+        # kolom isian: latar putih + garis krem supaya terpisah dari panel
+        + _pre('[data-testid="stFileUploaderDropzone"]') + " { background: var(--card); border: 1px solid var(--line); }\n"
+        + _pre('div[data-baseweb="select"] > div') + " { background: var(--card); border-color: var(--line); color: var(--text); }\n"
+        + _pre('[data-testid="stExpander"] details') + " { border-color: var(--line); background: var(--card); }\n"
+        + _pre('[data-testid="stDataFrame"]') + " { border: 1px solid var(--line); border-radius: 10px; }\n"
+    )
 
 st.markdown("<style>\n@import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap');\n"
             + VARS + """
@@ -227,11 +248,43 @@ section[data-testid="stSidebar"] { border-right: 1px solid var(--line); }
 button[data-baseweb="tab"] { font-weight: 700; }
 div[data-baseweb="tab-highlight"] { background-color: var(--accent) !important; }
 [data-testid="stImage"] img { border-radius: 10px; }
-</style>""", unsafe_allow_html=True)
+""" + CSS_TERANG + "</style>", unsafe_allow_html=True)
+
+try:
+    import streamlit.components.v1 as components
+    components.html("""<script>
+    (function () {
+      var p = window.parent.document;
+      function lum(c) {
+        var m = c && c.match(/[\\d.]+/g);
+        if (!m || m.length < 3) return null;
+        if (m.length > 3 && parseFloat(m[3]) === 0) return null;   // transparan
+        return 0.299 * m[0] + 0.587 * m[1] + 0.114 * m[2];
+      }
+      function terapkan() {
+        var app = p.querySelector('.stApp') || p.body;
+        var l = lum(getComputedStyle(app).backgroundColor);        // latar tema Streamlit
+        if (l === null) l = 255 - lum(getComputedStyle(app).color); // cadangan: warna teks
+        var nilai = l < 128 ? 'dark' : 'light';
+        if (p.documentElement.getAttribute('data-tema') !== nilai) p.documentElement.setAttribute('data-tema', nilai);
+      }
+      terapkan(); setInterval(terapkan, 250);
+    })();
+    </script>""", height=0)
+    st.markdown("<style>[data-testid=\"stElementContainer\"]:has(iframe[height=\"0\"]){display:none;}</style>",
+                unsafe_allow_html=True)
+except Exception:
+    pass
 
 
 def gaya_matplotlib():
     """Samakan warna grafik matplotlib dengan panel agar terbaca di mode terang maupun gelap."""
+    if MODE is None:  # tema baru diketahui di browser: pakai warna netral transparan
+        plt.rcParams.update({
+            "figure.facecolor": "none", "axes.facecolor": "none", "savefig.facecolor": "none", "savefig.transparent": True,
+            "text.color": "#857F68", "axes.labelcolor": "#857F68", "axes.edgecolor": "#B5AE92",
+            "xtick.color": "#857F68", "ytick.color": "#857F68"})
+        return
     plt.rcParams.update({
         "figure.facecolor": P["panel"], "axes.facecolor": P["panel"], "savefig.facecolor": P["panel"],
         "text.color": P["text"], "axes.labelcolor": P["text"], "axes.edgecolor": P["line"],
@@ -307,7 +360,7 @@ def baca_unggahan(file):
 
 scaler, models = muat_semua()
 
-st.markdown(f'<div class="hero"><h1>🍌 {html.escape(JUDUL)}</h1><p>{html.escape(DESKRIPSI)}</p></div>',
+st.markdown(f'<div class="hero"><h1> {html.escape(JUDUL)}</h1><p>{html.escape(DESKRIPSI)}</p></div>',
             unsafe_allow_html=True)
 
 if scaler is None or not models:
